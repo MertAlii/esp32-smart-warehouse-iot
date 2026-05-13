@@ -4,7 +4,7 @@ Bu proje, otonom bir akıllı depo sisteminin (Smart Warehouse) uçtan uca IoT u
 
 ## 🏗️ Sistem Mimarisi
 
-Sistem, merkezi bir **Kule (Master)** birimi tarafından MQTT protokolü üzerinden koordine edilir. Güvenlik için mesajlar **AES-128-CBC** ile şifrelenir.
+Sistem, merkezi bir **Kule (Master)** birimi tarafından MQTT protokolü üzerinden koordine edilir. Güvenlik için mesajlar **Dinamik Tuzlama ve Zincirleme XOR** (Dynamic Salt & Chained XOR) yöntemiyle şifrelenir.
 
 ### 1. Kule Birimi (Master - ESP32)
 - Sistemin beynidir.
@@ -28,14 +28,15 @@ Sistem, merkezi bir **Kule (Master)** birimi tarafından MQTT protokolü üzerin
 
 ## 🔐 Güvenlik ve Haberleşme
 - **Protokol:** MQTT (TCP/IP)
-- **Şifreleme:** AES-128-CBC (PKCS#7 Padding)
+- **Şifreleme:** Dinamik Tuzlamalı ve Zincirleme XOR (HEX Çıktılı)
+- **Güvenlik:** Her mesajda değişen dinamik tuz (salt) kullanımı
 - **Veri Formatı:** JSON (ArduinoJson)
 - **Heartbeat:** Tüm birimler 5 saniyede bir durum bildirimi gönderir.
 
 ## 🚀 Kurulum
 
 1. `config.h` dosyalarındaki Wi-Fi ve MQTT Broker (Raspberry Pi/Mosquitto) bilgilerini güncelleyin.
-2. `AES_KEY` anahtarının tüm birimlerde aynı olduğundan emin olun.
+2. `SECRET_KEY` anahtarının tüm birimlerde aynı olduğundan emin olun.
 3. Birimleri sırasıyla (Kule -> Diğerleri) enerjilendirin.
 4. Kule üzerindeki OLED ekrandan sistemin "ONLINE" olduğunu doğrulayın.
 

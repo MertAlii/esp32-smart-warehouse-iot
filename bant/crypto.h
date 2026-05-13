@@ -4,122 +4,89 @@
 #include <Arduino.h>
 #include "config.h"
 
-// Sadece ESP32 kullanıldığında mbedtls kütüphanelerini dahil et
-#if defined(ESP32)
-  #include <mbedtls/aes.h>
-  #include <mbedtls/base64.h>
-#endif
+// --- HEX DÖNÜŞÜM YARDIMCILARI (Kayıpsız iletim için) ---
+char toHex(uint8_t val) {
+    if (val < 10) return '0' + val;
+    return 'A' + (val - 10);
+}
 
-/**
- * @brief PKCS#7 standardına göre metnin sonuna padding (dolgu) ekler.
- */
-String pkcs7Pad(String input) {
-    int blockSize = 16;
-    int padLen = blockSize - (input.length() % blockSize);
-    String padded = input;
-    for (int i = 0; i < padLen; i++) {
-        padded += (char)padLen; 
-    }
-    return padded;
+uint8_t fromHex(char c) {
+    if (c >= '0' && c <= '9') return c - '0';
+    if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+    if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+    return 0;
 }
 
 /**
- * @brief PKCS#7 dolgusunu çözer ve temiz metni verir.
- */
-String pkcs7Unpad(String input) {
-    if (input.length() == 0) return input;
-    int padLen = input[input.length() - 1]; 
-    if (padLen > 0 && padLen <= 16) {
-        return input.substring(0, input.length() - padLen);
-    }
-    return input; 
-}
-
-/**
- * @brief JSON string'i AES-128-CBC ile şifreler, başa IV ekler ve Base64'e çevirir.
+ * @brief JSON string'i Dinamik Tuz (Salt) ve Zincirleme XOR ile şifreler, HEX olarak döndürür.
  */
 String sifrele(String jsonMesaj) {
     #if DEBUG_NO_ENCRYPTION == 1
-        return jsonMesaj; // Test modu aktifse şifrelemeden gönder
+        return jsonMesaj; // Test modu
     #else
-        #if defined(ESP32)
-            String paddedMsg = pkcs7Pad(jsonMesaj);
-            int inputLen = paddedMsg.length();
-            unsigned char output[inputLen];
-
-            unsigned char iv[16];
-            unsigned long currentMs = millis();
-            for (int i = 0; i < 16; i++) {
-                iv[i] = (currentMs >> (i % 4)) ^ (0xAA + i); 
-            }
+        if (jsonMesaj.length() == 0) return "";
+        
+        String output = "";
+        int keyLen = strlen(SECRET_KEY);
+        
+        // 1. Adım: Rastgele bir Tuz (Salt) oluştur. (Her mesajda farklı şifre çıkmasını sağlar)
+        uint8_t salt = random(0, 256); 
+        
+        // Şifreli metnin en başına tuzu gizliyoruz ki alıcı taraf çözebilsin
+        output += toHex(salt >> 4);
+        output += toHex(salt & 0x0F);
+        
+        // 2. Adım: Zincirleme XOR Şifreleme
+        for (int i = 0; i < jsonMesaj.length(); i++) {
+            uint8_t c = jsonMesaj[i];
+            uint8_t k = SECRET_KEY[i % keyLen];
             
-            unsigned char iv_copy[16];
-            memcpy(iv_copy, iv, 16);
-
-            mbedtls_aes_context aes;
-            mbedtls_aes_init(&aes);
-            mbedtls_aes_setkey_enc(&aes, AES_KEY, 128);
-            mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_ENCRYPT, inputLen, iv_copy, (const unsigned char*)paddedMsg.c_str(), output);
-            mbedtls_aes_free(&aes);
-
-            int combinedLen = 16 + inputLen;
-            unsigned char combined[combinedLen];
-            memcpy(combined, iv, 16);                 
-            memcpy(combined + 16, output, inputLen);  
-
-            size_t b64Len = 0;
-            mbedtls_base64_encode(NULL, 0, &b64Len, combined, combinedLen); 
-            unsigned char b64Output[b64Len];
-            mbedtls_base64_encode(b64Output, b64Len, &b64Len, combined, combinedLen); 
-
-            return String((char*)b64Output);
-        #elif defined(ESP8266)
-            // ESP8266 için şifreleme kütüphanesi aktif değil, ham veri gönderiliyor.
-            return jsonMesaj;
-        #endif
+            // Karakteri hem gizli anahtarla hem de o anki tuzla harmanla
+            uint8_t encryptedChar = c ^ k ^ salt;
+            
+            // Şifreli veriyi HEX olarak ekle
+            output += toHex(encryptedChar >> 4);
+            output += toHex(encryptedChar & 0x0F);
+            
+            // Zincirleme Mantığı: Bir sonraki karakter için tuzu anahtara göre değiştir
+            // Böylece şifreleme algoritması sürekli form değiştirir.
+            salt = (salt + k) % 256; 
+        }
+        return output;
     #endif
 }
 
 /**
- * @brief Base64 payload'u alır, çözer.
+ * @brief HEX formatındaki şifreli payload'u alır ve orijinal JSON'a geri çevirir.
  */
-String sifreCoz(String b64Payload) {
+String sifreCoz(String hexPayload) {
     #if DEBUG_NO_ENCRYPTION == 1
-        return b64Payload; // Test modu aktifse işlemi atla[cite: 2]
+        return hexPayload; // Test modu
     #else
-        #if defined(ESP32)
-            size_t decodedLen = 0;
-            mbedtls_base64_decode(NULL, 0, &decodedLen, (const unsigned char*)b64Payload.c_str(), b64Payload.length());
-            if (decodedLen == 0) return "";
+        if (hexPayload.length() < 2) return "";
+        
+        String output = "";
+        int keyLen = strlen(SECRET_KEY);
+        
+        // 1. Adım: Metnin en başından (ilk 2 HEX karakterden) ilk tuzu çekip al
+        uint8_t salt = (fromHex(hexPayload[0]) << 4) | fromHex(hexPayload[1]);
+        
+        // 2. Adım: Geri kalan HEX veriyi çöz
+        int charIndex = 0;
+        for (int i = 2; i < hexPayload.length(); i += 2) {
+            // İki HEX karakteri birleştirip 1 byte (şifreli karakter) elde et
+            uint8_t encryptedChar = (fromHex(hexPayload[i]) << 4) | fromHex(hexPayload[i+1]);
+            uint8_t k = SECRET_KEY[charIndex % keyLen];
             
-            unsigned char decoded[decodedLen];
-            mbedtls_base64_decode(decoded, decodedLen, &decodedLen, (const unsigned char*)b64Payload.c_str(), b64Payload.length());
-
-            if (decodedLen <= 16) return ""; 
-
-            unsigned char iv[16];
-            memcpy(iv, decoded, 16);
-            int cipherLen = decodedLen - 16;
-            unsigned char ciphertext[cipherLen];
-            memcpy(ciphertext, decoded + 16, cipherLen);
-            unsigned char output[cipherLen];
-
-            mbedtls_aes_context aes;
-            mbedtls_aes_init(&aes);
-            mbedtls_aes_setkey_dec(&aes, AES_KEY, 128);
-            mbedtls_aes_crypt_cbc(&aes, MBEDTLS_AES_DECRYPT, cipherLen, iv, ciphertext, output);
-            mbedtls_aes_free(&aes);
-
-            String decryptedStr = "";
-            for (int i = 0; i < cipherLen; i++) {
-                decryptedStr += (char)output[i];
-            }
-
-            return pkcs7Unpad(decryptedStr);
-        #elif defined(ESP8266)
-            // ESP8266 için şifre çözme kütüphanesi aktif değil, ham veri işleniyor.
-            return b64Payload;
-        #endif
+            // Geriye Dönüş Mantığı: Şifreli karakteri tuz ve anahtarla çöz
+            char c = encryptedChar ^ salt ^ k;
+            output += c;
+            
+            // Tuzu şifreleme tarafıyla birebir aynı şekilde güncelle ki döngü kopmasın
+            salt = (salt + k) % 256;
+            charIndex++;
+        }
+        return output;
     #endif
 }
 
