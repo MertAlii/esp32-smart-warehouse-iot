@@ -15,7 +15,8 @@
 #define TOPIC_KOL_TAMAM    "akillidepo/kol/islem_tamam"
 #define TOPIC_ARABA_DURUM  "akillidepo/araba/durum"
 
-/* * NOT: Heartbeat topic'leri dinamik olarak oluşturulacaktır.
+/* 
+ * NOT: Heartbeat topic'leri dinamik olarak oluşturulacaktır.
  * Örn: "akillidepo/bant/heartbeat", "akillidepo/kule/heartbeat"
  * Kule, abonelik için "akillidepo/+/heartbeat" wildcard'ını kullanır.
  */

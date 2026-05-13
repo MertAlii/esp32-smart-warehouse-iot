@@ -1,0 +1,17 @@
+# Arduino/ESP Build files
+build/
+bin/
+*.hex
+*.bin
+*.elf
+
+# Secret keys (if any separate)
+# config.h  # Note: Keeping config.h for now as requested, but usually ignored
+
+# System files
+.DS_Store
+Thumbs.db
+
+# VS Code
+.vscode/
+.pio/
