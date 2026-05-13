@@ -40,10 +40,6 @@ Sistem, merkezi bir **Kule (Master)** birimi tarafından MQTT protokolü üzerin
 3. Birimleri sırasıyla (Kule -> Diğerleri) enerjilendirin.
 4. Kule üzerindeki OLED ekrandan sistemin "ONLINE" olduğunu doğrulayın.
 
-## 👨‍💻 Geliştiriciler
-- Mert Ali Alkan
-- Umut Türker
-- Berk Talha Aslan
 
 ---
 *Bu proje eğitim amaçlı geliştirilmiş bir endüstri 4.0 prototipidir.*
