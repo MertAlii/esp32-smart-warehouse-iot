@@ -1,7 +1,7 @@
 /*
  * Proje: Akıllı Depo Sistemi - ARABA BİRİMİ (AGV)
  * Görev: Kule'den gelen emirle hedefe gider, 3 saniye bekler ve geri döner.
- * Özellik: Sensörsüz, Otonom Zamanlı Sürüş ve Siber Şalter Dinleme
+ * Özellik: Sensörsüz, Otonom Zamanlı Sürüş, Siber Şalter Dinleme ve Donanımsal Ters Motor Düzeltmesi
  */
 
 #include <ESP8266WiFi.h>
@@ -43,7 +43,8 @@ void setup() {
 
   // Motor Pin Ayarları
   pinMode(PIN_ENA, OUTPUT); pinMode(PIN_IN1, OUTPUT); pinMode(PIN_IN2, OUTPUT);
-  pinMode(PIN_IN3, OUTPUT); pinMode(PIN_IN4, OUTPUT); pinMode(PIN_ENB, OUTPUT);
+  pinMode(PIN_IN3, OUTPUT);
+  pinMode(PIN_IN4, OUTPUT); pinMode(PIN_ENB, OUTPUT);
   motorKontrol("dur");
 
   setupWiFi();
@@ -56,7 +57,6 @@ void setup() {
 void loop() {
   if (!mqtt.connected()) reconnectMQTT();
   mqtt.loop();
-
   unsigned long currentMillis = millis();
 
   // HEARTBEAT (Nabız) - 5 saniyede bir Kule'ye "Online" bildirimi
@@ -76,12 +76,12 @@ void loop() {
 void sistemiBeklet(int sureMs) {
   unsigned long baslangic = millis();
   while (millis() - baslangic < sureMs) {
-    mqtt.loop(); // Ağ trafiğini dinlemeye devam et
+    mqtt.loop();
+    // Ağ trafiğini dinlemeye devam et
     unsigned long currentMillis = millis();
-    
     // Yoldayken de Kule'ye "Ben Hayattayım" mesajı (Heartbeat) at!
     if (currentMillis - lastHeartbeat > HEARTBEAT_INTERVAL) {
-      StaticJsonDocument<128> doc; 
+      StaticJsonDocument<128> doc;
       doc["durum"] = "online"; 
       doc["timestamp"] = currentMillis;
       String jsonStr; serializeJson(doc, jsonStr);
@@ -106,7 +106,8 @@ void reconnectMQTT() {
     if (mqtt.connect(client_id)) {
       Serial.println("Baglandi.");
       mqtt.subscribe(TOPIC_ARABA_KOMUT);
-      mqtt.subscribe("akillidepo/ayar/sifreleme"); // SİBER ŞALTER KANALI
+      mqtt.subscribe("akillidepo/ayar/sifreleme");
+      // SİBER ŞALTER KANALI
     } else {
       Serial.println(" 5 sn sonra tekrar...");
       delay(RECONNECT_DELAY);
@@ -118,7 +119,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   String strTopic = String(topic);
   String msg = "";
   for (unsigned int i = 0; i < length; i++) msg += (char)payload[i];
-
+  
   // 1. SİBER ŞALTER KONTROLÜ (Şifresiz)
   if (strTopic == "akillidepo/ayar/sifreleme") {
     sifrelemeAktif = (msg == "1");
@@ -131,17 +132,16 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   StaticJsonDocument<256> doc;
   if (deserializeJson(doc, msg)) return;
-
+  
   if (strTopic == TOPIC_ARABA_KOMUT) {
     String komut = doc["komut"];
     String hedef = doc["hedef"];
-    
     if (komut == "git") {
       Serial.println("\n>>> KULE EMRİ: Teslimata gidiliyor...");
-      
       // 1. DÜMDÜZ GİT
       motorKontrol("ileri");
-      sistemiBeklet(4000); // 4 Saniye ileri (Kendi parkuruna göre bu süreyi değiştirebilirsin)
+      sistemiBeklet(4000);
+      // 4 Saniye ileri (Kendi parkuruna göre bu süreyi değiştirebilirsin)
       
       // 2. HEDEFTE 3 SANİYE DUR
       motorKontrol("dur");
@@ -153,12 +153,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
       motorKontrol("geri");
       sistemiBeklet(4000); // 4 Saniye geri dön
       motorKontrol("dur");
-
+      
       // BİTTİĞİNİ KULEYE BİLDİR
       StaticJsonDocument<128> reply;
       reply["tip"] = "teslim";
       reply["durum"] = "ok";
-      String replyStr; 
+      String replyStr;
       serializeJson(reply, replyStr);
       mqtt.publish(TOPIC_ARABA_DURUM, sifrele(replyStr).c_str(), 1);
       
@@ -171,14 +171,17 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 }
 
+// TERS BAĞLANTIYA GÖRE OPTİMİZE EDİLMİŞ MOTOR KONTROLÜ
 void motorKontrol(String yon) {
   if (yon == "ileri") {
-    analogWrite(PIN_ENA, motorHizi); digitalWrite(PIN_IN1, HIGH); digitalWrite(PIN_IN2, LOW);
-    analogWrite(PIN_ENB, motorHizi); digitalWrite(PIN_IN3, HIGH); digitalWrite(PIN_IN4, LOW);
+    // Fiziksel bağlantın ters olduğu için ileri komutunda motorları eskinin "geri" sinyalleriyle sürüyoruz
+    analogWrite(PIN_ENA, motorHizi); digitalWrite(PIN_IN1, LOW);  digitalWrite(PIN_IN2, HIGH);
+    analogWrite(PIN_ENB, motorHizi); digitalWrite(PIN_IN3, LOW);  digitalWrite(PIN_IN4, HIGH);
   } 
   else if (yon == "geri") {
-    analogWrite(PIN_ENA, motorHizi); digitalWrite(PIN_IN1, LOW); digitalWrite(PIN_IN2, HIGH);
-    analogWrite(PIN_ENB, motorHizi); digitalWrite(PIN_IN3, LOW); digitalWrite(PIN_IN4, HIGH);
+    // Geri komutunda motorları eskinin "ileri" sinyalleriyle sürüyoruz
+    analogWrite(PIN_ENA, motorHizi); digitalWrite(PIN_IN1, HIGH); digitalWrite(PIN_IN2, LOW);
+    analogWrite(PIN_ENB, motorHizi); digitalWrite(PIN_IN3, HIGH); digitalWrite(PIN_IN4, LOW);
   }
   else if (yon == "dur") {
     analogWrite(PIN_ENA, 0); digitalWrite(PIN_IN1, LOW); digitalWrite(PIN_IN2, LOW);

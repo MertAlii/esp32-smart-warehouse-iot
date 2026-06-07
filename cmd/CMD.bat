@@ -38,6 +38,6 @@ goto menu
 :dinle
 cls
 echo [SISTEM] Canli dinleme baslatiliyor... (Menuye donmek icin CTRL+C basin)
-python renkli_dinleyici.py
+python 01.py
 pause
 goto menu

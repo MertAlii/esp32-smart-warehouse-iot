@@ -19,7 +19,7 @@ MQTT_PORT = 1883
 
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
-        print(f"{GREEN}[SİSTEM] Ağa Sizildi! Gercek Zamanli Trafik Dinleniyor...{RESET}\n")
+        print(f"{GREEN}[SİSTEM] ---------------- {RESET}\n")
         client.subscribe("akillidepo/#")
     else:
         print(f"{RED}[HATA] Baglanilamadi! Kod: {reason_code}{RESET}")
