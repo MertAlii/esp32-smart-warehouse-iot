@@ -5,7 +5,7 @@ import os
 # Windows CMD'de özel renk kodlarını (ANSI) aktif etmek için
 os.system("color")
 
-# Siber Renk Paleti
+# Sistem Renk Paleti
 RESET = "\033[0m"
 CYAN = "\033[96m"    # Kule Rengi
 YELLOW = "\033[93m"  # Bant Rengi
@@ -19,10 +19,10 @@ MQTT_PORT = 1883
 
 def on_connect(client, userdata, flags, reason_code, properties):
     if reason_code == 0:
-        print(f"{GREEN}[SİSTEM] ---------------- {RESET}\n")
+        print(f"{GREEN}[SİSTEM] Ag baglantisi saglandi. Gercek zamanli log monitoru aktif...{RESET}\n")
         client.subscribe("akillidepo/#")
     else:
-        print(f"{RED}[HATA] Baglanilamadi! Kod: {reason_code}{RESET}")
+        print(f"{RED}[HATA] Baglanti kurulamadi! Hata Kodu: {reason_code}{RESET}")
 
 def on_message(client, userdata, msg):
     topic = msg.topic
@@ -43,7 +43,7 @@ def on_message(client, userdata, msg):
     # Çıktı Formatı: [Saat] [Konu] Mesaj
     print(f"\033[90m[{timestamp}] {color}[{topic}] {RESET}{payload}")
 
-client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "CMD_Renkli_Ajan")
+client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, "Log_Monitor_01")
 client.on_connect = on_connect
 client.on_message = on_message
 
@@ -51,6 +51,6 @@ try:
     client.connect(MQTT_BROKER, MQTT_PORT, 60)
     client.loop_forever()
 except KeyboardInterrupt:
-    print(f"\n{RED}Dinleme durduruldu. Menuye donuluyor...{RESET}")
+    print(f"\n{RED}[SİSTEM] Log monitoru durduruldu. Menuye donuluyor...{RESET}")
 except Exception as e:
-    print(f"{RED}Ağ Hatasi: {e}{RESET}")
+    print(f"{RED}[HATA] Ag baglantisi koptu: {e}{RESET}")   
